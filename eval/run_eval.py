@@ -1,0 +1,77 @@
+"""Run every case with each judge and write eval/results.json.
+
+Usage: python eval/run_eval.py --cases eval/cases --seeds 101 102 ... --judges gemma pixel-crop pixel-full
+                               [--repeats 3] [--workers 3] [--out eval/results.json] [--label test]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+SIDEBAR_REGION = "0,60,300,740"  # widest sidebar the generator can produce
+
+
+def run_case(cases: Path, seed: int, judge: str, rep: int, runs_root: Path) -> dict:
+    repo = cases / f"seed{seed}"
+    truth = json.loads((cases / f"seed{seed}.truth.json").read_text())
+    out = runs_root / judge / f"seed{seed}-r{rep}"
+    cmd = [sys.executable, "-m", "vbisect.cli", "--repo", str(repo), "--good", truth["good"],
+           "--bad", "HEAD", "--good-render", "--focus", truth["focus"], "--judge", judge,
+           "--out", str(out)]
+    if judge == "pixel-crop":
+        cmd += ["--region", SIDEBAR_REGION]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    return {"seed": seed, "judge": judge, "rep": rep, **score(out, truth), "returncode": p.returncode}
+
+
+def score(out: Path, truth: dict) -> dict:
+    path = out / "events.jsonl"
+    events = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
+    started = next((e for e in events if e["type"] == "run_started"), None)
+    done = next((e for e in events if e["type"] == "run_done"), None)
+    res = {"culprit_type": truth["culprit_type"], "difficulty": truth["difficulty"],
+           "found": done["culprit_sha"] if done else None, "exact": False,
+           "steps": 0, "skips": 0, "api_calls": 0, "seconds": None,
+           "step_correct": 0, "step_judged": 0, "run": str(out)}
+    if done:
+        res.update(exact=done["culprit_sha"] == truth["culprit_sha"], steps=done["steps"],
+                   skips=done["skips"], api_calls=done["api_calls"], seconds=done["seconds"])
+    if started:
+        order = {c["sha"]: i for i, c in enumerate(started["commits"])}
+        for e in events:
+            if e["type"] == "step_done" and e["verdict"] in ("old", "new") and e["sha"] in order:
+                # commits before the culprit index look OLD; the culprit and later look NEW
+                # (rev-list excludes the root commit, so list index i is repo commit i+1)
+                actual = "new" if order[e["sha"]] + 1 >= truth["culprit_index"] else "old"
+                res["step_judged"] += 1
+                res["step_correct"] += e["verdict"] == actual
+    return res
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cases", default="eval/cases")
+    ap.add_argument("--seeds", type=int, nargs="+", required=True)
+    ap.add_argument("--judges", nargs="+", default=["gemma", "pixel-crop", "pixel-full"])
+    ap.add_argument("--repeats", type=int, default=1, help="repeats for the gemma judge")
+    ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--label", default="dev")
+    ap.add_argument("--out", default="eval/results.json")
+    a = ap.parse_args()
+    cases, runs_root = Path(a.cases), Path("runs") / "eval" / a.label
+
+    jobs = [(s, j, r) for s in a.seeds for j in a.judges
+            for r in range(a.repeats if j == "gemma" else 1)]
+    with ThreadPoolExecutor(max_workers=a.workers) as pool:
+        results = list(pool.map(lambda job: run_case(cases, *job, runs_root), jobs))
+    Path(a.out).write_text(json.dumps({"label": a.label, "results": results}, indent=2))
+    ok = sum(r["exact"] for r in results)
+    print(f"wrote {a.out}: {ok}/{len(results)} exact")
+
+
+if __name__ == "__main__":
+    main()

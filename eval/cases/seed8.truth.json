@@ -1,0 +1,11 @@
+{
+  "seed": 8,
+  "culprit_sha": "7dd4204d49f5d8993081d20c5dca219065f7dd4d",
+  "culprit_index": 24,
+  "commits": 100,
+  "culprit_type": "reorder",
+  "difficulty": "obvious",
+  "focus": "the left sidebar (its color, width, icons, item order, text and spacing)",
+  "good": "a71fa9fe72728c4e3c8204f4985fd1fe40707fa0",
+  "bad": "HEAD"
+}

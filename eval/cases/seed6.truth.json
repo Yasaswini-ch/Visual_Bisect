@@ -1,0 +1,11 @@
+{
+  "seed": 6,
+  "culprit_sha": "ab5a75e1e42f6a3663b03ff530a7643568d82c14",
+  "culprit_index": 60,
+  "commits": 100,
+  "culprit_type": "font-weight",
+  "difficulty": "subtle",
+  "focus": "the left sidebar (its color, width, icons, item order, text and spacing)",
+  "good": "0f44338334574b89e3e80df34b925df1c490d050",
+  "bad": "HEAD"
+}

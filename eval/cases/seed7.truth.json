@@ -1,0 +1,11 @@
+{
+  "seed": 7,
+  "culprit_sha": "78f8dcf972f2d1f7a5673d41d32f894b1cfec3f6",
+  "culprit_index": 30,
+  "commits": 100,
+  "culprit_type": "icon-removed",
+  "difficulty": "obvious",
+  "focus": "the left sidebar (its color, width, icons, item order, text and spacing)",
+  "good": "68b09e85b335fbe50f802e834dcc9f1e517a56df",
+  "bad": "HEAD"
+}

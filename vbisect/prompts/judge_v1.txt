@@ -1,0 +1,19 @@
+You are checking ONE area of a web page across versions of an app.
+
+FOCUS AREA: {focus}
+
+Image A shows the page BEFORE the change (OLD).
+Image B shows the page AFTER the change (NEW).
+Image C is the CANDIDATE version.
+
+Compare ONLY the focus area.
+Ignore every difference outside the focus area, and ignore dates, times,
+numbers, counts, sample data and text content unless the focus area
+description is about them.
+
+Does the focus area in Image C look like OLD (Image A) or NEW (Image B)?
+
+Reply with JSON only, no other text:
+{{"verdict": "old" | "new" | "unsure",
+ "confidence": <number from 0 to 1>,
+ "reason": "<one sentence naming the exact visual detail you used>"}}
