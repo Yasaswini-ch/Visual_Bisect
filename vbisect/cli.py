@@ -36,11 +36,42 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--region", type=parse_region)
     ap.add_argument("--replay", action="store_true", help="use cached model responses only")
     ap.add_argument("--out", help="run folder (default runs/<timestamp>)")
+    ap.add_argument("--ui", action="store_true", help="open the live dashboard while the search runs")
     return ap
 
 
+def serve_main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="vbisect serve", description="Open the dashboard.")
+    ap.add_argument("--runs", default="runs")
+    ap.add_argument("--eval", default="eval/results.json")
+    ap.add_argument("--port", type=int, default=8000)
+    a = ap.parse_args(argv)
+    from . import server
+    print(f"Dashboard: http://127.0.0.1:{a.port}")
+    server.serve(a.runs, a.eval, port=a.port)
+    return 0
+
+
+def start_ui(runs_dir: str, port: int = 8000) -> None:
+    import threading
+    import webbrowser
+
+    from . import server
+    threading.Thread(target=server.serve, args=(str(Path(runs_dir)), "eval/results.json"),
+                     kwargs={"port": port}, daemon=True).start()
+    webbrowser.open(f"http://127.0.0.1:{port}")
+
+
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "serve":
+        return serve_main(argv[1:])
+    if argv and argv[0] == "export":
+        from . import export
+        return export.main(argv[1:])
     args = build_parser().parse_args(argv)
+    if args.ui:
+        start_ui(str(Path(args.out).parent) if args.out else "runs")
     repo = str(Path(args.repo).resolve())
     shot = Path(args.screenshot) if args.screenshot else None
     if shot is None and not args.good_render:
