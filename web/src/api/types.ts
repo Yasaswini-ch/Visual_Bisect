@@ -18,13 +18,13 @@ export type RunEvent = Base & (
 );
 
 export interface RunSummary {
-  id: string; started: number; focus: string | null; judge: string | null; commits: number;
+  id: string; started: number; date: string; focus: string | null; judge: string | null; commits: number;
   status: "running" | "done" | "failed"; culprit: string | null; steps: number | null; seconds: number | null;
 }
 
 export interface EvalRow {
   seed: number; judge: string; rep: number; culprit_type: string; difficulty: string; found: boolean;
-  exact: number; steps: number; skips: number; api_calls: number; seconds: number | null;
+  exact: number | boolean; steps: number; skips: number; api_calls: number; seconds: number | null;
   step_correct: number; step_judged: number; run: string;
 }
 export interface EvalData { label: string; results: EvalRow[] }

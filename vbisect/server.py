@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 TERMINAL = {"run_done", "run_failed"}
@@ -32,7 +33,8 @@ def summarize(run_dir: Path) -> dict | None:
         return None
     end = next((e for e in reversed(events) if e["type"] in TERMINAL), None)
     status = "running" if end is None else ("failed" if end["type"] == "run_failed" else "done")
-    return {"id": run_dir.name, "started": start["ts"], "focus": start.get("focus"),
+    return {"id": run_dir.name, "started": start["ts"],
+            "date": datetime.fromtimestamp(start["ts"], timezone.utc).isoformat(), "focus": start.get("focus"),
             "judge": start.get("judge"), "commits": len(start.get("commits", [])),
             "status": status, "culprit": end.get("culprit_sha") if end else None,
             "steps": end.get("steps") if end else None, "seconds": end.get("seconds") if end else None}
@@ -43,6 +45,14 @@ def create_app(runs_dir: str | Path = "runs", eval_path: str | Path = "eval/resu
     runs_root = Path(runs_dir).resolve()
     eval_file = Path(eval_path)
     app = FastAPI(title="visual-bisect")
+
+    @app.middleware("http")
+    async def loopback_only(request: Request, call_next):
+        # Blocks DNS-rebinding: a hostile page cannot read run data through a name that resolves to 127.0.0.1.
+        host = request.headers.get("host", "").rsplit(":", 1)[0].strip("[]")
+        if host not in ("127.0.0.1", "localhost", "::1", "testserver"):
+            return PlainTextResponse("forbidden host", status_code=403)
+        return await call_next(request)
 
     def run_path(run_id: str) -> Path:
         p = (runs_root / run_id).resolve()

@@ -14,7 +14,7 @@ export function judgeStats(rows: EvalRow[]) {
   return judges.map((j) => {
     const rs = rows.filter((r) => r.judge === j);
     const perRep = new Map<number, number>();
-    rs.forEach((r) => perRep.set(r.rep, (perRep.get(r.rep) ?? 0) + r.exact));
+    rs.forEach((r) => perRep.set(r.rep, (perRep.get(r.rep) ?? 0) + Number(r.exact)));
     const reps = [...perRep.values()];
     const judged = rs.reduce((a, r) => a + r.step_judged, 0);
     const times = rs.map((r) => r.seconds).filter((x): x is number => x != null);
@@ -98,7 +98,7 @@ export function JudgeArena() {
                   <td className="py-2">{t}</td>
                   {stats.map((s) => {
                     const sub = rows.filter((r) => r.judge === s.judge && r.culprit_type === t);
-                    return <td key={s.judge} className="mono">{sub.reduce((a, r) => a + r.exact, 0)}/{sub.length}</td>;
+                    return <td key={s.judge} className="mono">{sub.reduce((a, r) => a + Number(r.exact), 0)}/{sub.length}</td>;
                   })}
                 </tr>
               ))}
@@ -115,7 +115,7 @@ export function JudgeArena() {
                 <div className="flex gap-2 flex-wrap">
                   {stats.map((s) => {
                     const rs = c.rows.filter((r) => r.judge === s.judge);
-                    const hit = rs.filter((r) => r.exact).length;
+                    const hit = rs.filter((r) => Number(r.exact)).length;
                     const run = rs[0]?.run?.split(/[\\/]/).pop();
                     const chip = (
                       <span className="px-2 py-0.5 rounded text-xs mono" style={{ background: hit === rs.length ? "#2dd4bf22" : hit ? "#8b95a933" : "#fb734033",
