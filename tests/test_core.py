@@ -195,6 +195,29 @@ def test_presets_default_and_overrides():
     assert o.build == "make site" and o.install == "npm ci" and "next start" in o.serve
 
 
+def test_timeout_kills_hung_command_quickly(tmp_path):
+    import sys
+    import time
+
+    t0 = time.time()
+    with pytest.raises(builder.BuildFailed, match="timeout"):
+        builder._sh(f'"{sys.executable}" -c "import time; time.sleep(60)"', tmp_path, 2)
+    assert time.time() - t0 < 20  # used to hang forever on Windows
+
+
+def test_link_dir_and_remove_link_keep_source(tmp_path):
+    src, target = tmp_path / "cache" / "node_modules", tmp_path / "wt" / "node_modules"
+    src.mkdir(parents=True)
+    (src / "pkg.txt").write_text("x")
+    target.parent.mkdir()
+    builder._link_dir(target, src)
+    assert (target / "pkg.txt").read_text() == "x"
+    if builder._is_link(target):
+        builder.remove_link(target)
+        assert not target.exists()
+    assert (src / "pkg.txt").exists()  # removing the link must never delete the cache
+
+
 def test_empty_commands_are_skipped(tmp_path):
     builder._sh("", tmp_path, 5)  # must not raise or run anything
     builder._sh("   ", tmp_path, 5)

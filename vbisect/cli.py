@@ -58,6 +58,7 @@ def main(argv=None) -> int:
 
     run_dir = Path(args.out or Path("runs") / time.strftime("%Y%m%d-%H%M%S")).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "events.jsonl").unlink(missing_ok=True)  # a rerun into the same --out must not mix events
     old_img = run_dir / "old.png"
     if shot is not None:
         shutil.copy(shot, old_img)

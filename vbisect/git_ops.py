@@ -44,6 +44,11 @@ def make_worktree(repo: str, ref: str) -> Path:
 
 
 def cleanup(repo: str, worktree: Path) -> None:
+    from .builder import _is_link, remove_link
+
+    nm = worktree / "node_modules"
+    if _is_link(nm):  # a link into the shared dependency cache: drop the link, never the cache
+        remove_link(nm)
     git(repo, "worktree", "remove", "--force", str(worktree), check=False)
 
 
