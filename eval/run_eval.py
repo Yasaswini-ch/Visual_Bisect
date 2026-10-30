@@ -27,7 +27,10 @@ def run_case(cases: Path, seed: int, judge: str, rep: int, runs_root: Path) -> d
         cmd += ["--region", SIDEBAR_REGION]
     if judge == "gemma" and MODEL:
         cmd += ["--model", MODEL]
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "cli.log").write_text(f"returncode={p.returncode}\n--- stdout\n{p.stdout}\n--- stderr\n{p.stderr}",
+                                 encoding="utf-8")
     return {"seed": seed, "judge": judge, "rep": rep, **score(out, truth), "returncode": p.returncode}
 
 

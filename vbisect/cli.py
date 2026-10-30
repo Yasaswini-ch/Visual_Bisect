@@ -101,12 +101,21 @@ def main(argv=None) -> int:
         raise
     finally:
         builder.stop_server()
-        git_ops.cleanup(repo, wt_new)
-        if wt_old is not None:
-            git_ops.cleanup(repo, wt_old)
-        if wt:
-            git_ops.cleanup(repo, wt)
+        for w in (wt_new, wt_old, wt):  # a cleanup error must not hide the result
+            if w is not None:
+                try:
+                    git_ops.cleanup(repo, w)
+                except Exception:
+                    pass
 
+    try:
+        return _finish(repo, run_dir, result, t0)
+    except Exception as e:  # never end a run without a terminal event
+        events.append(run_dir, "run_failed", error=f"finish: {e!r}")
+        raise
+
+
+def _finish(repo: str, run_dir: Path, result: dict, t0: float) -> int:
     done = events.read_all(run_dir)
     steps = [e for e in done if e["type"] == "step_done"]
     skips = sum(1 for e in steps if e["verdict"] == "skip")

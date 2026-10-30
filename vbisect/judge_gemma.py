@@ -112,13 +112,13 @@ def make_gemini_caller(model: str, focus: str, replay: bool = False) -> Caller:
 
             if client is None:
                 # hung calls (seen up to 345 s) are cheaper to retry than to wait out
-                client = genai.Client(http_options=types.HttpOptions(timeout=120_000))
+                client = genai.Client(http_options=types.HttpOptions(timeout=60_000))
             contents = [prompt]
             for label, img in zip(("Image A (OLD):", "Image B (NEW):", "Image C (CANDIDATE):"), imgs):
                 contents += [label, types.Part.from_bytes(data=img, mime_type="image/png")]
             cfg = types.GenerateContentConfig(temperature=0)
             last_err: Exception | None = None
-            for attempt in range(5):  # 500s from the API are usually transient
+            for attempt in range(3):  # 500s from the API are usually transient
                 try:
                     resp = client.models.generate_content(model=model, contents=contents, config=cfg)
                     parsed = parse_response(resp.text or "")
