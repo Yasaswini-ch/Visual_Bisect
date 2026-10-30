@@ -19,6 +19,28 @@ summarizer. Verified on one 30-commit repo. The dev-set eval (8 repos x 3 judges
 
 ---
 
+## Demo plan and priority tiers (updated)
+The demo story: a real project's UI changed, we have one old screenshot, we press Start and watch the
+commit strip shrink live with Gemma's reasons, then the culprit appears with a before/after slider and the
+diff. Backup: a recorded video and `--replay` (cached model answers, works offline).
+
+- **Tier 1 (must be done by Sat afternoon):** a real public repo that works end to end, the dev/test eval
+  numbers, Live Run + Culprit reveal screens, `--replay` and a backup video.
+- **Tier 2 (only if Tier 1 is done):** New Run screen (drop a screenshot, draw a box, press Start),
+  replay site on GitHub Pages.
+- **Tier 3 (one "what's next" slide, not built):** a GitHub Action / bot that replies to a UI-regression
+  issue with the culprit commit.
+- We claim "web projects you can build and serve with a command", not "all repos". The README lists limits.
+
+## Yasaswini: backend, model swap, presets, first real repo
+Done so far: CLI, `git bisect run` pipeline, Gemma and pixel judges, cache/replay, repo generator, eval runner.
+1. Fix the dev eval (the first run exited with code 4) and produce `eval/results.dev.json`.
+2. Model-swap interface in `judge_gemma.py` (Gemma via the Gemini API stays the default; allow other vision
+   models, e.g. local via Ollama), so the project is self-hostable.
+3. Framework presets for the CLI: `--preset vite|next|static` (install/build/serve commands).
+4. `POST /api/runs` so the New Run screen can start a search (Tier 2; coordinate with Sriya).
+5. First attempt at the real-repo case (find a repo, get an OLD screenshot, run it); hand over to Likhitha to verify.
+
 ## Sriya: Dashboard (`vbisect/server.py`, `vbisect/export.py`, `web/`)
 Owns everything the judges look at. Plan section 10 is the spec.
 
@@ -36,6 +58,9 @@ Owns everything the judges look at. Plan section 10 is the spec.
 6. **Judge Arena** (after Likhitha's `results.json`): bar chart per judge, breakdown by culprit type, fooled gallery.
 7. **`export.py` + GitHub Pages**: static replay site from run folders + `results.json`.
 8. Presentation mode (`P` key).
+9. **New Run screen (Tier 2, only after Live Run + Culprit reveal work)**: drop an old screenshot, fill repo path /
+   refs / URL / focus, draw a box on the screenshot (sets `--region`), Start, then jump to Live Run.
+   Uses `POST /api/runs` (Yasaswini).
 
 Cut order if short on time (plan section 17): fooled gallery, onion skin/heatmap, New Run screen.
 Must not slip: Live Run, Culprit reveal, terminal output still works if the UI breaks.
@@ -49,7 +74,7 @@ Owns every number and every word judges read.
 2. **Test set (Fri PM, never tuned on)**: `python eval/make_repos.py --seeds 101 102 103 104 105 106 107 108 109 110 111 112 --commits 100`,
    then `python eval/run_eval.py --seeds 101 ... 112 --repeats 3 --workers 3 --label test --out eval/results.json`.
    Expect it to take a couple of hours; start it early. Commit `results.json` and the `*.truth.json` files.
-3. **Real-world case (Sat)**: one public repo that builds in under 60 s and has a visible UI change in its
+3. **Real-world case (Sat, Tier 1; picks up from Yasaswini's first attempt)**: one public repo that builds in under 60 s and has a visible UI change in its
    history (plan section 9.5). Run `vbisect`, verify the culprit by hand, keep its run folder for replay.
    Pre-warm the dependency cache. Label it n = 1.
 4. **README** (outline: plan section 13): quickstart, how it works, results table from `summarize.py`,
@@ -62,15 +87,16 @@ Owns every number and every word judges read.
 ---
 
 ## Timeline
-| When | Sriya | Likhitha |
-|---|---|---|
-| Fri | server.py, frontend skeleton, Live Run | dev results, tuning, start the test-set run |
-| Sat AM | Culprit reveal, Replay | test results, real-world case, README draft |
-| Sat PM | Judge Arena, export + Pages, presentation mode | README numbers, SKILL.md, demo video, rehearsal |
-| Sun | polish only, fix real bugs | final numbers, submission text, `v0.1.0`, submit 15 min early |
+| When | Yasaswini | Sriya | Likhitha |
+|---|---|---|---|
+| Fri | eval fix, model swap, presets, first real repo | server.py, frontend skeleton, Live Run | dev results, tuning, start the test-set run |
+| Sat AM | `POST /api/runs`, support Sriya and Likhitha | Culprit reveal, Replay | test results, verify real-world case, README draft |
+| Sat PM | bug fixes, backup video help | Judge Arena, export + Pages, presentation mode, New Run (Tier 2) | README numbers, SKILL.md, demo video, rehearsal |
+| Sun | fix real bugs only | polish only | final numbers, submission text, `v0.1.0`, submit 15 min early |
 
 ## Rules
-- Separate files, separate branches: Sriya owns `web/`, `server.py`, `export.py`; Likhitha owns `eval/`, `README.md`,
-  `prompts/`. Anything else (`oracle.py`, `judge_gemma.py`, `cli.py` bisect flow) is shared: message first.
+- Separate files, separate branches: Yasaswini owns `vbisect/` backend (`oracle.py`, `judge_gemma.py`, `cli.py`,
+  `builder.py`); Sriya owns `web/`, `server.py`, `export.py`; Likhitha owns `eval/`, `README.md`,
+  `prompts/`. Need a change in someone else's files (e.g. Sriya adding a `cli.py` subcommand)? Message the owner first.
 - If the Gemma API is flaky on event day, use the cache: `vbisect ... --replay`.
 - Check `git log` for secrets before making the repo public.
