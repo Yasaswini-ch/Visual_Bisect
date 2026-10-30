@@ -54,7 +54,7 @@ def create_app(runs_root: Path) -> FastAPI:
 
     @app.get("/")
     def index():
-        return FileResponse(STATIC / "index.html")
+        return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
 
     @app.get("/api/runs")
     def list_runs():
