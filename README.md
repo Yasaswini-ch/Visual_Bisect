@@ -61,6 +61,12 @@ Responses are cached by input hash. `--replay` uses only cached answers, so a ru
 generated repos with a known culprit (separate dev and test sets; only test-set numbers will be reported),
 plus one real-world case labelled n = 1. Run `python eval/summarize.py eval/results.json` once it exists.
 
+**Real-world case (n = 1, not a measured accuracy).** On [homow/dashboard-skeleton](https://github.com/homow/dashboard-skeleton),
+range `4ce2f40..8fa9e4a` (4 commits), the sidebar logo, text size and icons change subtly
+([before](docs/real-case/old.png), [after](docs/real-case/new.png)). The full-page pixel judge answered
+"unsure" at every step; the Gemma judge found `32632f7` ("update and config", which edits `SideBarHeader.jsx`)
+in 2 steps. Reproduce with `powershell -File eval/real_case.ps1 <venv-python> gemma`.
+
 ## Limitations
 - Web apps that build and serve locally with a command. No login-gated pages, mobile or desktop apps, or
   projects that need a database or secrets.
