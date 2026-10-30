@@ -6,6 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss()],
+  // Built into the Python package so wheels ship the UI.
+  build: { outDir: "../vbisect/web_dist", emptyOutDir: true },
   server: { proxy: { "/api": "http://127.0.0.1:8000" } },
   test: { environment: "node" },
 });

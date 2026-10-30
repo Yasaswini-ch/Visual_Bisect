@@ -7,3 +7,7 @@ eval/cases/*/
 !eval/cases/*/truth.json
 node_modules/
 web/dist/
+vbisect/web_dist/
+site/
+build/
+dist/
