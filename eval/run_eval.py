@@ -66,8 +66,21 @@ def main() -> None:
 
     jobs = [(s, j, r) for s in a.seeds for j in a.judges
             for r in range(a.repeats if j == "gemma" else 1)]
+    def safe(job):
+        # one crashing job must not lose the rest of a multi-hour batch
+        try:
+            res = run_case(cases, *job, runs_root)
+        except Exception as e:
+            s, j, r = job
+            res = {"seed": s, "judge": j, "rep": r, "exact": False, "found": None, "steps": 0, "skips": 0,
+                   "api_calls": 0, "seconds": None, "step_correct": 0, "step_judged": 0,
+                   "culprit_type": "unknown", "difficulty": "unknown", "error": repr(e)}
+        print(f"done seed{res['seed']} {res['judge']} r{res['rep']} exact={res['exact']} "
+              f"steps={res['steps']} skips={res['skips']}", flush=True)
+        return res
+
     with ThreadPoolExecutor(max_workers=a.workers) as pool:
-        results = list(pool.map(lambda job: run_case(cases, *job, runs_root), jobs))
+        results = list(pool.map(safe, jobs))
     Path(a.out).write_text(json.dumps({"label": a.label, "results": results}, indent=2))
     ok = sum(r["exact"] for r in results)
     print(f"wrote {a.out}: {ok}/{len(results)} exact")
