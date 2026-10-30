@@ -240,3 +240,24 @@ def test_commit_list_and_info(tmp_path):
     assert [c["subject"] for c in commits] == ["c1", "c2", "c3"]
     info = git_ops.commit_info(str(tmp_path), commits[0]["sha"])
     assert info["subject"] == "c1" and "f.txt" in info["stat"]
+
+
+# --- dashboard server ----------------------------------------------------
+
+def test_server_lists_runs_and_blocks_traversal(tmp_path):
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    from vbisect import server
+
+    run = tmp_path / "a" / "r1"
+    events.append(run, "run_started", run_id="r1", commits=[{"sha": "abc", "subject": "s"}], focus="f",
+                  old_ref_img="old.png", new_ref_img="new.png", judge="pixel-full", model=None)
+    (tmp_path / "secret.png").write_bytes(png("red"))
+    c = TestClient(server.create_app(tmp_path))
+    rows = c.get("/api/runs").json()
+    assert rows[0]["id"] == "a/r1" and rows[0]["state"] == "running" and rows[0]["commits"] == 1
+    assert c.get("/api/events", params={"run": "a/r1"}).json()[0]["type"] == "run_started"
+    assert c.get("/api/events", params={"run": "../.."}).status_code == 400
+    assert c.get("/api/file", params={"run": "a/r1", "name": "../../secret.png"}).status_code == 404
+    assert c.post("/api/runs", json={"repo": str(tmp_path), "good": "a", "focus": "f"}).status_code == 400

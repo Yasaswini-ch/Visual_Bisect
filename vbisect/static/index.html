@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Bisect</title>
+<style>
+:root{--bg:#0f1115;--panel:#181b22;--line:#2a2f3a;--text:#e6e8ee;--dim:#8b93a5;--old:#3fb68b;--new:#e5624d;--skip:#d9a441;--todo:#3a4050;--acc:#6ea8ff}
+@media (prefers-color-scheme:light){:root{--bg:#f6f7f9;--panel:#fff;--line:#dde1e8;--text:#1b1f27;--dim:#667085;--todo:#cfd5df}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0}header .sp{flex:1}
+button,input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+button{cursor:pointer;background:var(--acc);color:#fff;border-color:var(--acc)}button.ghost{background:var(--panel);color:var(--text);border-color:var(--line)}
+main{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 54px)}
+aside{border-right:1px solid var(--line);padding:8px;overflow:auto}
+.run{padding:8px;border-radius:6px;cursor:pointer;border:1px solid transparent}.run:hover{border-color:var(--line)}.run.sel{background:var(--panel);border-color:var(--line)}
+.run b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.run small{color:var(--dim)}
+section{padding:16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+.refs{display:grid;grid-template-columns:1fr 1fr;gap:12px}.refs figure{margin:0}.refs img{width:100%;border:1px solid var(--line);border-radius:6px}
+figcaption{color:var(--dim);font-size:12px;margin-bottom:4px}
+.strip{display:flex;gap:2px;flex-wrap:wrap}.cell{width:10px;height:22px;border-radius:2px;background:var(--todo)}
+.cell.old{background:var(--old)}.cell.new{background:var(--new)}.cell.skip{background:var(--skip)}.cell.cur{outline:2px solid var(--acc)}.cell.cul{background:#fff;outline:2px solid var(--new)}
+.legend{color:var(--dim);font-size:12px;margin-top:6px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px}
+.step{display:grid;grid-template-columns:120px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--line)}.step:first-child{border-top:0}
+.step img{width:120px;border:1px solid var(--line);border-radius:4px}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff}.badge.old{background:var(--old)}.badge.new{background:var(--new)}.badge.skip{background:var(--skip)}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}.dim{color:var(--dim)}
+.culprit{border-color:var(--new)}pre{white-space:pre-wrap;max-height:260px;overflow:auto;margin:8px 0 0}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;width:min(520px,92vw)}
+label{display:block;margin:8px 0 2px;color:var(--dim);font-size:12px}dialog input,dialog select{width:100%}
+@media(max-width:760px){main{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line);max-height:180px}.refs{grid-template-columns:1fr}.step{grid-template-columns:80px 1fr}.step img{width:80px}}
+</style>
+</head>
+<body>
+<header><h1>Visual Bisect</h1><span class="dim">git bisect that can see</span><span class="sp"></span><button id="newBtn">New run</button></header>
+<main>
+<aside id="runs"></aside>
+<section id="view"><p class="dim">Pick a run on the left, or start a new one.</p></section>
+</main>
+<dialog id="dlg"><form method="dialog" id="form">
+<h3 style="margin-top:0">New run</h3>
+<label>Local git repo path</label><input name="repo" required placeholder="C:\path\to\repo">
+<label>Good (old) commit</label><input name="good" required>
+<label>Bad (new) commit</label><input name="bad" value="HEAD">
+<label>What changed, in words</label><input name="focus" required placeholder="the left sidebar (logo, icons, text size)">
+<label>Page path</label><input name="url" value="/">
+<label>Judge</label><select name="judge"><option>gemma</option><option>pixel-full</option></select>
+<label>Preset</label><select name="preset"><option value="">vite (default)</option><option>next</option><option>static</option></select>
+<p style="margin-top:14px"><button type="submit">Start</button> <button type="button" class="ghost" id="cancel">Cancel</button> <span id="err" class="dim"></span></p>
+</form></dialog>
+<script>
+const $=s=>document.querySelector(s);let cur=null,es=null,state=null;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const img=(run,name)=>`/api/file?run=${encodeURIComponent(run)}&name=${encodeURIComponent(name)}`;
+async function loadRuns(){
+  try{const rows=await (await fetch('/api/runs')).json();
+  $('#runs').innerHTML=rows.map(r=>`<div class="run ${r.id===cur?'sel':''}" data-id="${esc(r.id)}"><b>${esc(r.id)}</b><small>${esc(r.state)} · ${esc(r.judge)}${r.model?' · '+esc(r.model):''} · ${r.commits} commits</small></div>`).join('')||'<p class="dim">No runs yet.</p>';
+  document.querySelectorAll('.run').forEach(el=>el.onclick=()=>open(el.dataset.id));}catch(e){}
+}
+function fresh(){return {start:null,steps:{},order:[],done:null,failed:null,current:null,calls:{}}}
+function apply(e){
+  const s=state;
+  if(e.type==='run_started'){s.start=e;s.order=e.commits.map(c=>c.sha)}
+  else if(e.type==='step_started'){s.current=e.sha;s.steps[e.sha]=s.steps[e.sha]||{}}
+  else if(e.type==='render_done'){(s.steps[e.sha]=s.steps[e.sha]||{}).img=e.img}
+  else if(e.type==='judge_call'){((s.calls[e.sha]=s.calls[e.sha]||[])).push(e)}
+  else if(e.type==='step_done'){(s.steps[e.sha]=s.steps[e.sha]||{}).verdict=e.verdict;s.steps[e.sha].skip=e.skip_reason;if(s.current===e.sha)s.current=null}
+  else if(e.type==='run_done'){s.done=e;s.current=null}
+  else if(e.type==='run_failed'){s.failed=e;s.current=null}
+}
+function render(){
+  const s=state;if(!s||!s.start){$('#view').innerHTML='<p class="dim">Waiting for the run to start…</p>';return}
+  const st=s.start,subj=Object.fromEntries(st.commits.map(c=>[c.sha,c.subject]));
+  const cells=s.order.map(sha=>{const v=s.steps[sha]?.verdict;return `<div class="cell ${v||''} ${s.current===sha?'cur':''} ${s.done?.culprit_sha===sha?'cul':''}" title="${esc(sha.slice(0,10)+' '+subj[sha])}"></div>`}).join('');
+  const tested=Object.entries(s.steps).filter(([,x])=>x.verdict);
+  let h=`<div class="card"><b>${esc(st.focus)}</b><div class="dim">${esc(st.judge)}${st.model?' · '+esc(st.model):''} · ${st.commits.length} commits in range · ${tested.length} tested</div></div>`;
+  if(s.done){h+=s.done.culprit_sha?`<div class="card culprit"><b>Culprit: <span class="mono">${esc(s.done.culprit_sha.slice(0,10))}</span> ${esc(subj[s.done.culprit_sha]||'')}</b><div class="dim">${s.done.steps} steps · ${s.done.skips} skipped · ${s.done.api_calls} model calls · ${s.done.seconds}s</div><pre class="mono" id="diff"></pre></div>`:`<div class="card culprit"><b>Could not narrow to one commit</b><div class="dim">${s.done.skips} skipped steps</div></div>`}
+  if(s.failed)h+=`<div class="card culprit"><b>Run failed</b><pre class="mono">${esc(s.failed.error)}</pre></div>`;
+  h+=`<div class="refs card"><figure><figcaption>OLD reference</figcaption><img src="${img(cur,st.old_ref_img)}"></figure><figure><figcaption>NEW reference</figcaption><img src="${img(cur,st.new_ref_img)}"></figure></div>`;
+  h+=`<div class="card"><div class="strip">${cells}</div><div class="legend"><i style="background:var(--old)"></i>old<i style="background:var(--new)"></i>new<i style="background:var(--skip)"></i>skipped<i style="background:var(--todo)"></i>not tested</div></div>`;
+  h+='<div class="card"><b>Steps</b>'+(tested.length||s.current?'':'<div class="dim">No steps yet.</div>');
+  const rows=[...tested.map(([sha])=>sha)];if(s.current&&!rows.includes(s.current))rows.push(s.current);
+  h+=rows.reverse().map(sha=>{const x=s.steps[sha]||{},c=(s.calls[sha]||[]).slice().sort((a,b)=>a.call_no-b.call_no);
+    const why=c.map(k=>`<div class="dim">${esc(k.verdict)} (${Math.round((k.confidence||0)*100)}%): ${esc(k.reason)}</div>`).join('');
+    return `<div class="step"><div>${x.img?`<img src="${img(cur,x.img)}">`:'<div class="dim">building…</div>'}</div><div><span class="mono">${esc(sha.slice(0,10))}</span> ${esc(subj[sha])} ${x.verdict?`<span class="badge ${x.verdict}">${esc(x.verdict)}</span>`:'<span class="dim">in progress…</span>'}${x.skip?`<div class="dim">${esc(String(x.skip).slice(0,160))}</div>`:''}${why}</div></div>`}).join('')+'</div>';
+  $('#view').innerHTML=h;
+  if(s.done?.diff_file)fetch(`/api/diff?run=${encodeURIComponent(cur)}`).then(r=>r.json()).then(d=>{const p=$('#diff');if(p)p.textContent=d.diff}).catch(()=>{});
+}
+async function open(id){
+  cur=id;state=fresh();if(es)es.close();
+  const evs=await (await fetch('/api/events?run='+encodeURIComponent(id))).json();
+  evs.forEach(apply);render();loadRuns();
+  if(!state.done&&!state.failed){es=new EventSource('/api/stream?run='+encodeURIComponent(id));let n=evs.length,i=0;
+    es.onmessage=m=>{if(i++<n)return;apply(JSON.parse(m.data));render()};es.onerror=()=>{es.close();loadRuns()}}
+}
+$('#newBtn').onclick=()=>$('#dlg').showModal();$('#cancel').onclick=()=>$('#dlg').close();
+$('#form').onsubmit=async ev=>{ev.preventDefault();const body=Object.fromEntries(new FormData(ev.target));if(!body.preset)delete body.preset;
+  const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){$('#err').textContent=(await r.json()).detail||'failed';return}
+  const {id}=await r.json();$('#dlg').close();setTimeout(()=>open(id),1500)};
+loadRuns();setInterval(loadRuns,5000);
+</script>
+</body>
+</html>

@@ -42,6 +42,11 @@ Use your own screenshot instead of `--good-render`: `--screenshot old.png`.
 `--preset vite` (default), `next` or `static` (plain HTML, nothing to build). Any of
 `--install-cmd`, `--build-cmd`, `--serve-cmd` overrides the preset; use `{port}` in the serve command.
 
+### Live dashboard
+`python -m vbisect.server` (or `vbisect-ui`) serves http://127.0.0.1:8431: every run under `runs/` with its
+OLD/NEW references, a commit strip that fills in as the bisect narrows, each step's render and the model's
+reasoning, and the culprit diff. "New run" starts a bisect from the browser. It only listens on localhost.
+
 ## How it works
 ```
 vbisect CLI -> git worktree -> git bisect run python -m vbisect.oracle

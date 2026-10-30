@@ -18,12 +18,13 @@ dev = ["pytest"]
 
 [project.scripts]
 vbisect = "vbisect.cli:main"
+vbisect-ui = "vbisect.server:main"
 
 [tool.setuptools.packages.find]
 include = ["vbisect*"]
 
 [tool.setuptools.package-data]
-vbisect = ["prompts/*.txt"]
+vbisect = ["prompts/*.txt", "static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

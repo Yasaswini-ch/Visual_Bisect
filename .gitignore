@@ -9,3 +9,5 @@ node_modules/
 web/dist/
 eval_dev.log
 eval/results.diag.json
+server.err
+server.out
