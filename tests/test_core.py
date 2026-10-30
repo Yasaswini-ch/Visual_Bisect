@@ -143,6 +143,24 @@ def test_oracle_maps_failures_to_skip(tmp_path, monkeypatch):
     assert e.value.code == 125
 
 
+# --- presets -------------------------------------------------------------
+
+def test_presets_default_and_overrides():
+    from vbisect import presets
+
+    d = presets.resolve(None, None, None, None)
+    assert d.install == "npm ci" and "vite preview" in d.serve and "{port}" in d.serve
+    s = presets.resolve("static", None, None, None)
+    assert s.install == "" and s.build == "" and "http.server" in s.serve and "{port}" in s.serve
+    o = presets.resolve("next", None, "make site", None)  # explicit flag beats the preset
+    assert o.build == "make site" and o.install == "npm ci" and "next start" in o.serve
+
+
+def test_empty_commands_are_skipped(tmp_path):
+    builder._sh("", tmp_path, 5)  # must not raise or run anything
+    builder._sh("   ", tmp_path, 5)
+
+
 # --- git ops -------------------------------------------------------------
 
 def test_commit_list_and_info(tmp_path):

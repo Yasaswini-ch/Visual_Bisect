@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import builder, events, git_ops, renderer
+from . import builder, events, git_ops, presets, renderer
 from .config import RunConfig
 
 
@@ -29,9 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="no screenshot: build and render the --good commit as the OLD reference")
     ap.add_argument("--url", default="/", help="page path, e.g. /dashboard")
     ap.add_argument("--focus", required=True, help="what changed, in words")
-    ap.add_argument("--install-cmd", default="npm ci")
-    ap.add_argument("--build-cmd", default="npm run build")
-    ap.add_argument("--serve-cmd", default="npx vite preview --host 127.0.0.1 --strictPort --port {port}")
+    ap.add_argument("--preset", choices=sorted(presets.PRESETS), default=None,
+                    help=f"command preset (default {presets.DEFAULT}); the flags below override it")
+    ap.add_argument("--install-cmd", default=None)
+    ap.add_argument("--build-cmd", default=None)
+    ap.add_argument("--serve-cmd", default=None, help="use {port} for the port")
     ap.add_argument("--judge", choices=["gemma", "pixel-full", "pixel-crop"], default="gemma")
     ap.add_argument("--region", type=parse_region)
     ap.add_argument("--replay", action="store_true", help="use cached model responses only")
@@ -50,6 +52,7 @@ def main(argv=None) -> int:
     if args.judge == "pixel-crop" and not args.region:
         sys.exit("--judge pixel-crop needs --region")
     good, bad = git_ops.resolve(repo, args.good), git_ops.resolve(repo, args.bad)
+    cmds = presets.resolve(args.preset, args.install_cmd, args.build_cmd, args.serve_cmd)
 
     run_dir = Path(args.out or Path("runs") / time.strftime("%Y%m%d-%H%M%S")).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -60,8 +63,8 @@ def main(argv=None) -> int:
     cfg = RunConfig(repo=repo, good=good, bad=bad, url=args.url, focus=args.focus,
                     run_dir=str(run_dir), old_img=str(old_img), new_img=str(run_dir / "new.png"),
                     judge=args.judge, model=os.environ.get("GEMMA_MODEL", ""), region=args.region,
-                    install_cmd=args.install_cmd, build_cmd=args.build_cmd,
-                    serve_cmd=args.serve_cmd, replay=args.replay)
+                    install_cmd=cmds.install, build_cmd=cmds.build,
+                    serve_cmd=cmds.serve, replay=args.replay)
     if cfg.judge == "gemma" and not cfg.model:
         sys.exit("GEMMA_MODEL is not set (see .env.example)")
 

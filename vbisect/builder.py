@@ -37,6 +37,8 @@ def _lock_hash(wt: Path) -> str | None:
 
 
 def _sh(cmd: str, cwd: Path, timeout: int) -> None:
+    if not cmd.strip():  # e.g. the "static" preset has nothing to install or build
+        return
     try:
         r = subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
