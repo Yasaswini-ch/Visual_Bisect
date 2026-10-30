@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0e14;
+  --color-panel: #131823;
+  --color-line: #232b3b;
+  --color-old: #2dd4bf;
+  --color-new: #fb7340;
+  --color-skip: #7b8497;
+  --color-ink: #e6e9f0;
+  --color-dim: #8b95a9;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-bg); color: var(--color-ink); font-family: Inter, system-ui, sans-serif; margin: 0; }
+.mono { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; }
+body.present .dev-only { display: none !important; }
+body.present { font-size: 120%; }

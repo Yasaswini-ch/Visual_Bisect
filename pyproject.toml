@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "httpx"]
 
 [project.scripts]
 vbisect = "vbisect.cli:main"
@@ -23,7 +23,7 @@ vbisect = "vbisect.cli:main"
 include = ["vbisect*"]
 
 [tool.setuptools.package-data]
-vbisect = ["prompts/*.txt"]
+vbisect = ["prompts/*.txt", "web_dist/*", "web_dist/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
