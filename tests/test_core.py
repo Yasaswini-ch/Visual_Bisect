@@ -143,6 +143,45 @@ def test_oracle_maps_failures_to_skip(tmp_path, monkeypatch):
     assert e.value.code == 125
 
 
+# --- model providers -----------------------------------------------------
+
+def test_make_caller_dispatch(monkeypatch):
+    seen = []
+    monkeypatch.setattr(judge_gemma, "make_ollama_caller", lambda m, f, r=False: seen.append(("ollama", m)))
+    monkeypatch.setattr(judge_gemma, "make_gemini_caller", lambda m, f, r=False: seen.append(("gemini", m)))
+    judge_gemma.make_caller("ollama:gemma3:12b", "f")
+    judge_gemma.make_caller("gemma-4-26b-a4b-it", "f")
+    judge_gemma.make_caller("gemini-3.5-flash", "f")
+    assert seen == [("ollama", "gemma3:12b"), ("gemini", "gemma-4-26b-a4b-it"), ("gemini", "gemini-3.5-flash")]
+
+
+def test_ollama_caller_request_and_cache(tmp_path, monkeypatch):
+    import json as _json
+    import urllib.request
+
+    sent = []
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self):
+            return _json.dumps({"message": {"content": '{"verdict":"new","confidence":0.9,"reason":"r"}'}}).encode()
+
+    def fake_urlopen(req, timeout=0):
+        sent.append(_json.loads(req.data))
+        return Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(cache, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(cache.cached_call, "__defaults__", (False, tmp_path))
+    call = judge_gemma.make_ollama_caller("gemma3:12b", "the sidebar")
+    a, b, c = png("white"), png("black"), png("gray")
+    assert call(a, b, c)["verdict"] == "new"
+    body = sent[0]
+    assert body["model"] == "gemma3:12b" and len(body["messages"][0]["images"]) == 3
+    assert call(a, b, c)["verdict"] == "new" and len(sent) == 1  # second call served from cache
+
+
 # --- presets -------------------------------------------------------------
 
 def test_presets_default_and_overrides():

@@ -137,3 +137,56 @@ def make_gemini_caller(model: str, focus: str, replay: bool = False) -> Caller:
         return cache.cached_call(key, fetch, replay=replay)
 
     return call
+
+
+def make_ollama_caller(model: str, focus: str, replay: bool = False) -> Caller:
+    """Local vision model through Ollama's HTTP API (no extra dependencies, no API key).
+
+    Select with --model ollama:<name>, e.g. ollama:gemma3:12b. Set OLLAMA_HOST to change the server.
+    """
+    import base64
+    import os
+    import urllib.request
+
+    prompt = PROMPT_PATH.read_text().format(focus=focus)
+    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+    if not host.startswith("http"):
+        host = "http://" + host
+    cache_model = f"ollama:{model}"
+
+    def call(old: bytes, new: bytes, cand: bytes) -> dict:
+        imgs = [downscale(i) for i in (old, new, cand)]
+        key = cache.make_key(cache_model, PROMPT_VERSION, focus, imgs)
+
+        def fetch() -> dict:
+            body = json.dumps({
+                "model": model, "stream": False, "format": "json", "options": {"temperature": 0},
+                "messages": [{"role": "user",
+                              "content": prompt + "\nThe three images are A (OLD), B (NEW), C (CANDIDATE), in that order.",
+                              "images": [base64.b64encode(i).decode() for i in imgs]}],
+            }).encode()
+            last_err: Exception | None = None
+            for attempt in range(3):
+                try:
+                    req = urllib.request.Request(f"{host}/api/chat", data=body,
+                                                 headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=300) as r:
+                        text = json.loads(r.read())["message"]["content"]
+                    return parse_response(text) or {
+                        "verdict": "unsure", "confidence": 0.0, "reason": "unparseable response"}
+                except Exception as e:
+                    last_err = e
+                    time.sleep(2 * 2 ** attempt)
+            raise RuntimeError(f"Ollama call failed after retries: {last_err}")
+
+        return cache.cached_call(key, fetch, replay=replay)
+
+    return call
+
+
+def make_caller(model: str, focus: str, replay: bool = False) -> Caller:
+    """Pick the provider from the model name: `ollama:<name>` is local, anything else uses the Gemini API
+    (which serves both gemma-* and gemini-* models)."""
+    if model.startswith("ollama:"):
+        return make_ollama_caller(model.removeprefix("ollama:"), focus, replay)
+    return make_gemini_caller(model, focus, replay)

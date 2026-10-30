@@ -31,7 +31,7 @@ def evaluate(cfg: RunConfig, sha: str, wt: Path, cand_png: bytes | None = None) 
 
     old, new = Path(cfg.old_img).read_bytes(), Path(cfg.new_img).read_bytes()
     if cfg.judge == "gemma":
-        caller = judge_gemma.make_gemini_caller(cfg.model, cfg.focus, cfg.replay)
+        caller = judge_gemma.make_caller(cfg.model, cfg.focus, cfg.replay)
         verdict, calls = judge_gemma.decide(
             caller, old, new, cand_png,
             on_call=lambda c: events.append(run_dir, "judge_call", sha=sha, **c))

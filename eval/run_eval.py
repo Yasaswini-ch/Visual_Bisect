@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 SIDEBAR_REGION = "0,60,300,740"  # widest sidebar the generator can produce
+MODEL = ""  # set from --model; empty means use $GEMMA_MODEL
 
 
 def run_case(cases: Path, seed: int, judge: str, rep: int, runs_root: Path) -> dict:
@@ -24,6 +25,8 @@ def run_case(cases: Path, seed: int, judge: str, rep: int, runs_root: Path) -> d
            "--out", str(out)]
     if judge == "pixel-crop":
         cmd += ["--region", SIDEBAR_REGION]
+    if judge == "gemma" and MODEL:
+        cmd += ["--model", MODEL]
     p = subprocess.run(cmd, capture_output=True, text=True)
     return {"seed": seed, "judge": judge, "rep": rep, **score(out, truth), "returncode": p.returncode}
 
@@ -59,9 +62,12 @@ def main() -> None:
     ap.add_argument("--judges", nargs="+", default=["gemma", "pixel-crop", "pixel-full"])
     ap.add_argument("--repeats", type=int, default=1, help="repeats for the gemma judge")
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--model", default="", help="vision model for the gemma judge (default $GEMMA_MODEL)")
     ap.add_argument("--label", default="dev")
     ap.add_argument("--out", default="eval/results.json")
     a = ap.parse_args()
+    global MODEL
+    MODEL = a.model
     cases, runs_root = Path(a.cases), Path("runs") / "eval" / a.label
 
     jobs = [(s, j, r) for s in a.seeds for j in a.judges

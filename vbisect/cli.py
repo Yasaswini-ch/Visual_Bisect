@@ -36,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--serve-cmd", default=None, help="use {port} for the port")
     ap.add_argument("--judge", choices=["gemma", "pixel-full", "pixel-crop"], default="gemma")
     ap.add_argument("--region", type=parse_region)
+    ap.add_argument("--model", help="vision model; default $GEMMA_MODEL. gemma-*/gemini-* use the Gemini "
+                                    "API, ollama:<name> uses a local Ollama server")
     ap.add_argument("--replay", action="store_true", help="use cached model responses only")
     ap.add_argument("--out", help="run folder (default runs/<timestamp>)")
     return ap
@@ -62,16 +64,16 @@ def main(argv=None) -> int:
 
     cfg = RunConfig(repo=repo, good=good, bad=bad, url=args.url, focus=args.focus,
                     run_dir=str(run_dir), old_img=str(old_img), new_img=str(run_dir / "new.png"),
-                    judge=args.judge, model=os.environ.get("GEMMA_MODEL", ""), region=args.region,
+                    judge=args.judge, model=args.model or os.environ.get("GEMMA_MODEL", ""), region=args.region,
                     install_cmd=cmds.install, build_cmd=cmds.build,
                     serve_cmd=cmds.serve, replay=args.replay)
     if cfg.judge == "gemma" and not cfg.model:
-        sys.exit("GEMMA_MODEL is not set (see .env.example)")
+        sys.exit("no model: pass --model or set GEMMA_MODEL (see .env.example)")
 
     commits = git_ops.commit_list(repo, good, bad)
     events.append(run_dir, "run_started", run_id=run_dir.name, commits=commits, good=good, bad=bad,
                   focus=cfg.focus, url=cfg.url, old_ref_img="old.png", new_ref_img="new.png",
-                  judge=cfg.judge)
+                  judge=cfg.judge, model=cfg.model if cfg.judge == "gemma" else None)
     t0 = time.time()
     wt_new = git_ops.make_worktree(repo, bad)
     wt_old = git_ops.make_worktree(repo, good) if shot is None else None
