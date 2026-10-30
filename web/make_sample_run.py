@@ -1,10 +1,12 @@
 """Write a synthetic but realistic run folder to develop the dashboard against.
-Usage: python web/make_sample_run.py [runs/sample]"""
+Usage: python web/make_sample_run.py [runs/sample] [--live]   (--live trickles events out like a real run)"""
 import json, random, sys, time
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-out = Path(sys.argv[1] if len(sys.argv) > 1 else "runs/sample")
+args = [a for a in sys.argv[1:] if a != "--live"]
+LIVE = "--live" in sys.argv
+out = Path(args[0] if args else "runs/sample")
 (out / "renders").mkdir(parents=True, exist_ok=True)
 rnd = random.Random(7)
 N, CULPRIT = 16, 10
@@ -92,5 +94,17 @@ while hi - lo > 1:
     else: lo = mid
 add("run_done", 0.5, culprit_sha=shas[hi], steps=step, skips=1, api_calls=call,
     seconds=round(t - ev[0]["ts"], 1), diff_file="culprit.diff")
-(out / "events.jsonl").write_text("\n".join(json.dumps(e) for e in ev) + "\n")
-print("wrote", out, len(ev), "events; culprit", shas[hi][:10])
+if LIVE:
+    # Real pacing, compressed ~3x, with timestamps of "now" so elapsed time in the UI is sensible.
+    path = out / "events.jsonl"
+    path.write_text("")
+    prev = ev[0]["ts"]
+    for e in ev:
+        time.sleep(min((e["ts"] - prev) / 3, 1.5)); prev = e["ts"]
+        e = {**e, "ts": round(time.time(), 3)}
+        with open(path, "a") as f:
+            f.write(json.dumps(e) + "\n")
+    print("live run written", out)
+else:
+    (out / "events.jsonl").write_text("\n".join(json.dumps(e) for e in ev) + "\n")
+    print("wrote", out, len(ev), "events; culprit", shas[hi][:10])

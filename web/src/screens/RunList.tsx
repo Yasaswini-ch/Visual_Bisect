@@ -8,8 +8,9 @@ const STATUS: Record<string, string> = { running: "var(--color-old)", done: "var
 export function RunList() {
   const source = useRunStore((s) => s.source);
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    const load = () => source?.listRuns().then(setRuns).catch(() => setRuns([]));
+    const load = () => source?.listRuns().then((r) => { setRuns(r); setErr(null); }).catch((e) => { setRuns([]); setErr(String(e.message ?? e)); });
     load();
     const id = source?.live ? setInterval(load, 3000) : undefined;
     return () => clearInterval(id);
@@ -19,7 +20,8 @@ export function RunList() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-xl font-semibold mb-4">Runs</h1>
-      {runs.length === 0 && <div className="text-dim">No runs yet. Start one with <span className="mono">vbisect --repo … --ui</span>.</div>}
+      {err && <div className="text-new mb-3 text-sm">{err}</div>}
+      {runs.length === 0 && !err && <div className="text-dim">No runs yet. Start one with <span className="mono">vbisect --repo … --ui</span>.</div>}
       <div className="space-y-2">
         {runs.map((r) => (
           <div key={r.id} className="flex items-center gap-4 p-4 rounded-xl border border-line bg-panel">

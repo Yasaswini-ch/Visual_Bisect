@@ -1,36 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ErrorBar, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { EvalData, EvalRow } from "../api/types";
+import type { EvalData } from "../api/types";
+import { isExact, judgeStats, replayId, typeBreakdown } from "../state/arena";
 import { useRunStore } from "../state/runStore";
 
-const NAMES: Record<string, string> = { gemma: "Gemma 4", "pixel-crop": "Pixel-crop", "pixel-full": "Pixel-full" };
 const COLORS: Record<string, string> = { gemma: "#2dd4bf", "pixel-crop": "#8b95a9", "pixel-full": "#5b6579" };
-const label = (j: string) => NAMES[j] ?? j;
-const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
-
-export function judgeStats(rows: EvalRow[]) {
-  const seeds = new Set(rows.map((r) => r.seed)).size;
-  const judges = [...new Set(rows.map((r) => r.judge))];
-  return judges.map((j) => {
-    const rs = rows.filter((r) => r.judge === j);
-    const perRep = new Map<number, number>();
-    rs.forEach((r) => perRep.set(r.rep, (perRep.get(r.rep) ?? 0) + Number(r.exact)));
-    const reps = [...perRep.values()];
-    const judged = rs.reduce((a, r) => a + r.step_judged, 0);
-    const times = rs.map((r) => r.seconds).filter((x): x is number => x != null);
-    return {
-      judge: j, name: label(j), seeds, mean: mean(reps), min: Math.min(...reps), max: Math.max(...reps),
-      err: [mean(reps) - Math.min(...reps), Math.max(...reps) - mean(reps)] as [number, number],
-      stepAcc: judged ? rs.reduce((a, r) => a + r.step_correct, 0) / judged : null,
-      steps: mean(rs.map((r) => r.steps)), skips: mean(rs.map((r) => r.skips)), seconds: times.length ? mean(times) : null,
-    };
-  });
-}
 
 export function JudgeArena() {
   const source = useRunStore((s) => s.source);
   const [data, setData] = useState<EvalData | null | undefined>(undefined);
-  useEffect(() => { source?.loadEval().then(setData); }, [source]);
+  const [available, setAvailable] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    source?.loadEval().then(setData);
+    source?.listRuns().then((r) => setAvailable(new Set(r.map((x) => x.id)))).catch(() => {});
+  }, [source]);
 
   const rows = data?.results ?? [];
   const stats = useMemo(() => judgeStats(rows), [rows]);
@@ -97,8 +80,8 @@ export function JudgeArena() {
                 <tr key={t} className="border-t border-line">
                   <td className="py-2">{t}</td>
                   {stats.map((s) => {
-                    const sub = rows.filter((r) => r.judge === s.judge && r.culprit_type === t);
-                    return <td key={s.judge} className="mono">{sub.reduce((a, r) => a + Number(r.exact), 0)}/{sub.length}</td>;
+                    const b = typeBreakdown(rows, s.judge, t);
+                    return <td key={s.judge} className="mono">{b.exact}/{b.total}</td>;
                   })}
                 </tr>
               ))}
@@ -115,15 +98,15 @@ export function JudgeArena() {
                 <div className="flex gap-2 flex-wrap">
                   {stats.map((s) => {
                     const rs = c.rows.filter((r) => r.judge === s.judge);
-                    const hit = rs.filter((r) => Number(r.exact)).length;
-                    const run = rs[0]?.run?.split(/[\\/]/).pop();
+                    const hit = rs.filter((r) => isExact(r)).length;
+                    const run = replayId(rs[0]?.run, available);
                     const chip = (
                       <span className="px-2 py-0.5 rounded text-xs mono" style={{ background: hit === rs.length ? "#2dd4bf22" : hit ? "#8b95a933" : "#fb734033",
                         color: hit === rs.length ? "var(--color-old)" : hit ? "var(--color-dim)" : "var(--color-new)" }}>
                         {s.name} {hit}/{rs.length}
                       </span>
                     );
-                    return run && source?.live ? <a key={s.judge} href={`#/replay/${run}`} title="open replay">{chip}</a> : <span key={s.judge}>{chip}</span>;
+                    return run ? <a key={s.judge} href={`#/replay/${run}`} title="open replay">{chip}</a> : <span key={s.judge}>{chip}</span>;
                   })}
                 </div>
               </div>

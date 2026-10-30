@@ -54,6 +54,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (!source) return () => {};
     let unsub = () => {};
     let alive = true;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const load = async (first: boolean) => {
       try {
         const events = await source.loadEvents(id);
@@ -63,17 +64,24 @@ export const useRunStore = create<RunStore>((set, get) => ({
         else set({ events, times, cursor: events.length });
         return events;
       } catch (e) {
-        if (alive) set({ loadError: String(e) });
+        if (!alive) return;
+        // `vbisect --ui` opens the page before the run folder exists: keep asking instead of failing.
+        if (mode === "live" && source.live && String(e).includes(": 404")) {
+          retry = setTimeout(() => start(first), 1000);
+          return;
+        }
+        set({ loadError: String(e) });
       }
     };
-    load(true).then((events) => {
-      if (!alive || mode === "replay" || !source.live) return;
-      const finished = events?.some((e) => e.type === "run_done" || e.type === "run_failed");
-      if (finished) return;
+    const start = async (first: boolean) => {
+      const events = await load(first);
+      if (!events || !alive || mode === "replay" || !source.live) return;
+      if (events.some((e) => e.type === "run_done" || e.type === "run_failed")) return;
       // The stream replays from the start and push() drops duplicates, so a reconnect just reloads.
       unsub = source.subscribe(id, (e) => get().push(e), () => { load(false); });
-    });
-    return () => { alive = false; unsub(); };
+    };
+    start(true);
+    return () => { alive = false; clearTimeout(retry); unsub(); };
   },
 
   push(e) {
