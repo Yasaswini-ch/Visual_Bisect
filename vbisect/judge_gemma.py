@@ -15,9 +15,10 @@ PROMPT_VERSION = "judge_v1"
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.txt"
 MIN_CONF = 0.6
 MAX_SIDE = 1024  # 1280-wide renders are shrunk; smaller requests failed less often (500/504s at full size)
-REQUEST_TIMEOUT_MS = 90_000
-RETRY_ROUNDS = 2  # after a round of failed attempts, wait out a transient outage and try once more
+REQUEST_TIMEOUT_MS = 45_000  # healthy calls take 5-20 s; the failures are quick 500s or long hangs
+RETRY_ROUNDS = 1
 ROUND_PAUSE_S = 45
+ATTEMPTS = 5
 
 # A "caller" takes (old_png, new_png, cand_png) in A/B/C order and returns a parsed
 # {"verdict","confidence","reason"} dict. Injected so the decision logic is testable.
@@ -122,7 +123,7 @@ def make_gemini_caller(model: str, focus: str, replay: bool = False) -> Caller:
             cfg = types.GenerateContentConfig(temperature=0)
             last_err: Exception | None = None
             for rnd in range(RETRY_ROUNDS):
-                for attempt in range(3):  # 500s from the API are usually transient
+                for attempt in range(ATTEMPTS):  # 500s from the API are usually transient
                     try:
                         resp = client.models.generate_content(model=model, contents=contents, config=cfg)
                         parsed = parse_response(resp.text or "")
@@ -135,7 +136,7 @@ def make_gemini_caller(model: str, focus: str, replay: bool = False) -> Caller:
                         return parsed
                     except Exception as e:  # network / rate limit
                         last_err = e
-                        time.sleep(2 * 2 ** attempt)
+                        time.sleep(min(2 * 2 ** attempt, 10))
                 if rnd + 1 < RETRY_ROUNDS:
                     time.sleep(ROUND_PAUSE_S)
             raise RuntimeError(f"Gemini API failed after retries: {last_err}")
