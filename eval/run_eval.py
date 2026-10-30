@@ -9,6 +9,7 @@ import argparse
 import json
 import subprocess
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -75,10 +76,16 @@ def main() -> None:
 
     jobs = [(s, j, r) for s in a.seeds for j in a.judges
             for r in range(a.repeats if j == "gemma" else 1)]
+    gemma_slot = threading.Semaphore(1)  # concurrent model requests overloaded the API (500/504s)
+
     def safe(job):
         # one crashing job must not lose the rest of a multi-hour batch
         try:
-            res = run_case(cases, *job, runs_root)
+            if job[1] == "gemma":
+                with gemma_slot:
+                    res = run_case(cases, *job, runs_root)
+            else:
+                res = run_case(cases, *job, runs_root)
         except Exception as e:
             s, j, r = job
             res = {"seed": s, "judge": j, "rep": r, "exact": False, "found": None, "steps": 0, "skips": 0,

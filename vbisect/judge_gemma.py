@@ -14,7 +14,10 @@ from . import cache
 PROMPT_VERSION = "judge_v1"
 PROMPT_PATH = Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.txt"
 MIN_CONF = 0.6
-MAX_SIDE = 1600
+MAX_SIDE = 1024  # 1280-wide renders are shrunk; smaller requests failed less often (500/504s at full size)
+REQUEST_TIMEOUT_MS = 90_000
+RETRY_ROUNDS = 2  # after a round of failed attempts, wait out a transient outage and try once more
+ROUND_PAUSE_S = 45
 
 # A "caller" takes (old_png, new_png, cand_png) in A/B/C order and returns a parsed
 # {"verdict","confidence","reason"} dict. Injected so the decision logic is testable.
@@ -112,26 +115,29 @@ def make_gemini_caller(model: str, focus: str, replay: bool = False) -> Caller:
 
             if client is None:
                 # hung calls (seen up to 345 s) are cheaper to retry than to wait out
-                client = genai.Client(http_options=types.HttpOptions(timeout=60_000))
+                client = genai.Client(http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
             contents = [prompt]
             for label, img in zip(("Image A (OLD):", "Image B (NEW):", "Image C (CANDIDATE):"), imgs):
                 contents += [label, types.Part.from_bytes(data=img, mime_type="image/png")]
             cfg = types.GenerateContentConfig(temperature=0)
             last_err: Exception | None = None
-            for attempt in range(3):  # 500s from the API are usually transient
-                try:
-                    resp = client.models.generate_content(model=model, contents=contents, config=cfg)
-                    parsed = parse_response(resp.text or "")
-                    if parsed is None:
-                        resp = client.models.generate_content(
-                            model=model, contents=contents + ["Reply with JSON only."], config=cfg)
+            for rnd in range(RETRY_ROUNDS):
+                for attempt in range(3):  # 500s from the API are usually transient
+                    try:
+                        resp = client.models.generate_content(model=model, contents=contents, config=cfg)
                         parsed = parse_response(resp.text or "")
-                    if parsed is None:
-                        return {"verdict": "unsure", "confidence": 0.0, "reason": "unparseable response"}
-                    return parsed
-                except Exception as e:  # network / rate limit
-                    last_err = e
-                    time.sleep(2 * 2 ** attempt)
+                        if parsed is None:
+                            resp = client.models.generate_content(
+                                model=model, contents=contents + ["Reply with JSON only."], config=cfg)
+                            parsed = parse_response(resp.text or "")
+                        if parsed is None:
+                            return {"verdict": "unsure", "confidence": 0.0, "reason": "unparseable response"}
+                        return parsed
+                    except Exception as e:  # network / rate limit
+                        last_err = e
+                        time.sleep(2 * 2 ** attempt)
+                if rnd + 1 < RETRY_ROUNDS:
+                    time.sleep(ROUND_PAUSE_S)
             raise RuntimeError(f"Gemini API failed after retries: {last_err}")
 
         return cache.cached_call(key, fetch, replay=replay)
